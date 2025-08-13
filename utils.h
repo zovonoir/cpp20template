@@ -14,7 +14,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-// #include "logger.h"
 
 using namespace std;
 namespace utils {
@@ -71,7 +70,7 @@ void Print(NestedContainerWithPrintableElement auto c) {
       Print(sc);
       Print(",");
     }
-    cout << "\x08\x08"; // 退格
+    cout << "\x08\x08"; // backspace
     Print("]");
   }
 }
@@ -120,7 +119,6 @@ concept NestedContainerWithArithmeticElement = requires(T c) {
 
 #endif
 
-// 接收一个容器,将其中的数据全部加起来
 template <ContainerWithArithmeticElement C>
 typename std::decay_t<decltype(*(declval<C>().begin()))> sum(C &&c) {
   using return_type = typename std::decay_t<decltype(*(declval<C>().begin()))>;
@@ -144,7 +142,6 @@ sum(C &&c) {
   return sumval;
 }
 
-// 接收一个容器,将其中的数据全部乘起来
 template <ContainerWithArithmeticElement C>
 typename std::decay_t<decltype(*(declval<C>().begin()))> prod(C &&c) {
   if (c.size() == 0) {
@@ -171,7 +168,6 @@ prod(C &&c) {
   return prodval;
 }
 
-// 计算普通容器的元素乘积
 template <ContainerWithArithmeticElement C>
 std::decay_t<decltype(*std::declval<C>().begin())> numel(C &&c) {
   if (c.size() == 0) {
@@ -185,7 +181,6 @@ std::decay_t<decltype(*std::declval<C>().begin())> numel(C &&c) {
   return prodval;
 }
 
-// 计算嵌套容器的元素乘积
 template <NestedContainerWithArithmeticElement C>
 typename std::decay_t<decltype(*(*declval<C>().begin()).begin())> numel(C &&c) {
   if (c.size() == 0) {
