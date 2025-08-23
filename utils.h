@@ -14,6 +14,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <numeric>
 
 using namespace std;
 namespace utils {
@@ -89,35 +90,31 @@ template <AnyInput... T1> void println(T1... any_inputs) {
 template <typename T>
 concept Arithmetic = std::is_arithmetic_v<std::decay_t<T>>;
 
-#if 1 // both pass!
-
 template <typename T>
 concept ContainerWithArithmeticElement = requires(T c) {
   {*c.begin()};
+  {c.size()};
 }
-&&Arithmetic<decltype(*(declval<T>().begin()))>;
+&& Arithmetic<decltype(*(declval<T>().begin()))>;
 
 template <typename T>
 concept NestedContainerWithArithmeticElement = requires(T c) {
   {*c.begin()};
+  {c.size()};
 }
-&&ContainerWithArithmeticElement<decltype(*(declval<T>().begin()))>;
+&& ContainerWithArithmeticElement<decltype(*(declval<T>().begin()))>;
 
-#else
-
-template <typename T>
-concept ContainerWithArithmeticElement = requires(T c) {
-  {*c.begin()};
-  requires Arithmetic<decltype(*(declval<T>().begin()))>;
+template<typename T>
+concept Comparable = requires(T t1,T t2){
+  {t1<t2}->std::convertible_to<bool>;
 };
 
-template <typename T>
-concept NestedContainerWithArithmeticElement = requires(T c) {
-  {*c.begin()};
-  requires ContainerWithArithmeticElement<decltype(*(declval<T>().begin()))>;
-};
-
-#endif
+template<typename T>
+concept ContainerWithComparableElement = requires(T c){
+    {*c.begin()};
+    {c.size()};
+}
+&& Comparable<decltype(*(declval<T>().begin()))>;
 
 template <ContainerWithArithmeticElement C>
 typename std::decay_t<decltype(*(declval<C>().begin()))> sum(C &&c) {
@@ -386,11 +383,6 @@ template <std::size_t N> auto vunpack(ContainerWithArithmeticElement auto &&c) {
     return std::make_tuple(c[Is]...);
   }
   (std::make_index_sequence<N>{});
-  // return std::apply([](auto... args){return std::make_tuple(args...);},c);
-  // auto indices = make_index_tuple(std::make_index_sequence<N>{});
-  // return std::apply([&c](auto... Is) {
-  //   return std::make_tuple(c[Is]...);
-  // }, indices);
 }
 
 template <std::size_t N>
@@ -407,34 +399,58 @@ auto vunpack(NestedContainerWithArithmeticElement auto &&c) {
   (std::make_index_sequence<N>{});
 }
 
-Arithmetic auto max(const Arithmetic auto &a, const Arithmetic auto &b) {
-  return a > b ? a : b;
+auto max(const Comparable auto& a,const Comparable auto& b) {
+  return a < b ? b : a;
 }
 
-template <Arithmetic... Args>
-Arithmetic auto max(const Arithmetic auto &a, const Args &...args) {
+template<Comparable... Args>
+auto max(const Comparable auto& a,const Args&... args){
   return utils::max(a, utils::max(args...));
 }
 
-template <std::size_t N>
-auto max(const ContainerWithArithmeticElement auto &a) {
-  auto unpacks = vunpack<N>(a);
-  return std::apply([](auto... args) { return utils::max(args...); }, unpacks);
+template <
+    template <typename, typename> class Container, 
+    typename T,
+    typename Allocator = std::allocator<T>
+>
+auto max(const Container<T,Allocator>& container){
+  if(container.size() == 0){
+    throw std::runtime_error(std::string("container must contain at least one element!"));
+  }
+
+  return std::accumulate(
+            container.begin(),
+            container.end(),
+            *container.begin(),
+            [](auto a,auto b){return utils::max(a,b);}
+          );
 }
 
-Arithmetic auto min(const Arithmetic auto &a, const Arithmetic auto &b) {
-  return a <= b ? a : b;
+auto min(const Comparable auto& a,const Comparable auto& b) {
+  return a < b ? a : b;
 }
 
-template <Arithmetic... Args>
-Arithmetic auto min(const Arithmetic auto &a, const Args &...args) {
+template<Comparable... Args>
+auto min(const Comparable auto& a,const Args&... args){
   return utils::min(a, utils::min(args...));
 }
 
-template <std::size_t N>
-auto min(const ContainerWithArithmeticElement auto &a) {
-  auto unpacks = vunpack<N>(a);
-  return std::apply([](auto... args) { return utils::min(args...); }, unpacks);
+template <
+    template <typename, typename> class Container, 
+    typename T,
+    typename Allocator = std::allocator<T>
+>
+auto min(const Container<T,Allocator>& container){
+  if(container.size() == 0){
+    throw std::runtime_error(std::string("container must contain at least one element!"));
+  }
+  
+  return std::accumulate(
+            container.begin(),
+            container.end(),
+            *container.begin(),
+            [](auto a,auto b){return utils::min(a,b);}
+          );
 }
 
 template <ContainerWithArithmeticElement C, typename Predicate>
@@ -502,6 +518,7 @@ template <typename F, typename... Args> void timeit(F &&f, Args &&...args) {
 
 /*
 fold(f,x1,x2,x3,x4,x5...)=f(...f(f(f(f(x1,x2),x3),x4),x5)...)
+reference to : https://reference.wolfram.com/language/ref/Fold.html
 */
 template <typename Func, typename First, typename Second>
 auto fold(Func &&f, First &&first, Second &&second) {
@@ -520,8 +537,29 @@ auto fold(Func &&f, First &&first, Second &&second, Rest &&...rest) {
       std::forward<Rest>(rest)...);
 }
 
+template<
+  template<typename,typename> class Container,
+  typename T,
+  typename Allocator = std::allocator<T>,
+  typename Func
+>
+auto fold(Func&& f,const Container<T,Allocator>& container){
+  if(container.size() == 0){
+    throw std::runtime_error(std::string("container must contain at least one element!"));
+  }
+  return std::accumulate(
+      container.begin(),
+      container.end(),
+      *container.begin(),
+      [&f](auto a,auto b){
+        return std::forward<Func>(f)(a,b);
+      }
+  );
+}
+
 /*
 nest(f,x0,n) = f(...f(f(f(f(x0))))...) // n nest time
+reference to : https://reference.wolfram.com/language/ref/Nest.html
 */
 template <typename Func, typename Start>
 auto nest(Func &&f, Start &&start, size_t depth) {
