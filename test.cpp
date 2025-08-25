@@ -7,8 +7,6 @@
 
 #include "utils.h"
 
-#if 1
-
 TEST(test, test_print) {
   int x = 1;
   float y = 2.0;
@@ -237,5 +235,3 @@ TEST(test, fold2) {
                   std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
   EXPECT_TRUE(factorial10 == 1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9 * 10);
 }
-
-#endif

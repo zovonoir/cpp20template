@@ -8,5 +8,3 @@ add_subdirectory(external/googletest)
 
 add_executable(test test.cpp)
 target_link_libraries(test PRIVATE gtest gtest_main)
-
-add_executable(rangetest rangetest.cpp)
