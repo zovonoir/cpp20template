@@ -422,7 +422,7 @@ public:
   iterator end() {
     return iterator{
         this->_c.size(),
-        this->_c.end()}; // 因为要做到编译期实现，所以这里只能先写死一个数
+        this->_c.end()};
   }
   T _c;
   uint64_t count = 0;
