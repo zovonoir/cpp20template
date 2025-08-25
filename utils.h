@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -14,7 +15,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <numeric>
 
 using namespace std;
 namespace utils {
@@ -95,26 +95,26 @@ concept ContainerWithArithmeticElement = requires(T c) {
   {*c.begin()};
   {c.size()};
 }
-&& Arithmetic<decltype(*(declval<T>().begin()))>;
+&&Arithmetic<decltype(*(declval<T>().begin()))>;
 
 template <typename T>
 concept NestedContainerWithArithmeticElement = requires(T c) {
   {*c.begin()};
   {c.size()};
 }
-&& ContainerWithArithmeticElement<decltype(*(declval<T>().begin()))>;
+&&ContainerWithArithmeticElement<decltype(*(declval<T>().begin()))>;
 
-template<typename T>
-concept Comparable = requires(T t1,T t2){
-  {t1<t2}->std::convertible_to<bool>;
+template <typename T>
+concept Comparable = requires(T t1, T t2) {
+  { t1 < t2 } -> std::convertible_to<bool>;
 };
 
-template<typename T>
-concept ContainerWithComparableElement = requires(T c){
-    {*c.begin()};
-    {c.size()};
+template <typename T>
+concept ContainerWithComparableElement = requires(T c) {
+  {*c.begin()};
+  {c.size()};
 }
-&& Comparable<decltype(*(declval<T>().begin()))>;
+&&Comparable<decltype(*(declval<T>().begin()))>;
 
 template <ContainerWithArithmeticElement C>
 typename std::decay_t<decltype(*(declval<C>().begin()))> sum(C &&c) {
@@ -247,11 +247,53 @@ shape_to_string(NestedContainerWithPrintableElement auto &&shape) {
   return ss.str();
 }
 
+auto max(const Comparable auto &a, const Comparable auto &b) {
+  return a < b ? b : a;
+}
+
+template <Comparable... Args>
+auto max(const Comparable auto &a, const Args &...args) {
+  return utils::max(a, utils::max(args...));
+}
+
+template <template <typename, typename> class Container, typename T,
+          typename Allocator = std::allocator<T>>
+auto max(const Container<T, Allocator> &container) {
+  if (container.size() == 0) {
+    throw std::runtime_error(
+        std::string("container must contain at least one element!"));
+  }
+
+  return std::accumulate(container.begin(), container.end(), *container.begin(),
+                         [](auto a, auto b) { return utils::max(a, b); });
+}
+
+auto min(const Comparable auto &a, const Comparable auto &b) {
+  return a < b ? a : b;
+}
+
+template <Comparable... Args>
+auto min(const Comparable auto &a, const Args &...args) {
+  return utils::min(a, utils::min(args...));
+}
+
+template <template <typename, typename> class Container, typename T,
+          typename Allocator = std::allocator<T>>
+auto min(const Container<T, Allocator> &container) {
+  if (container.size() == 0) {
+    throw std::runtime_error(
+        std::string("container must contain at least one element!"));
+  }
+
+  return std::accumulate(container.begin(), container.end(), *container.begin(),
+                         [](auto a, auto b) { return utils::min(a, b); });
+}
+
 template <typename Iterator1, typename Iterator2> class zipiterator {
 public:
-  zipiterator(Iterator1 it1, Iterator1 it1_end, Iterator2 it2,
+  zipiterator(Iterator1 it1_begin, Iterator1 it1_end, Iterator2 it2_begin,
               Iterator2 it2_end)
-      : _it1(it1), _it2(it2), _it1_end(it1_end), _it2_end(it2_end) {
+      : _it1(it1_begin), _it2(it2_begin), _it1_end(it1_end), _it2_end(it2_end) {
     this->has_end_iter = true;
   };
   zipiterator(Iterator1 it1, Iterator2 it2) : _it1(it1), _it2(it2) {
@@ -261,12 +303,15 @@ public:
                                 typename Iterator2::value_type>;
   value_type operator*() { return value_type(*(this->_it1), *(this->_it2)); }
   zipiterator &operator++() {
-    //        if(this->_it1 == this->_it1_end){
-    //            return *
-    //        }
-    this->_it1++;
-    this->_it2++;
+    ++this->_it1;
+    ++this->_it2;
     return *this;
+  }
+
+  zipiterator operator++(int) {
+    zipiterator tmp = *this;
+    ++(*this); // 复用前置自增
+    return tmp;
   }
 
   bool operator==(const zipiterator &other) const {
@@ -299,7 +344,8 @@ public:
       // println("warning:utils::zip length not match");
     }
 
-    return !(this->_it1 == other._it1 || this->_it2 == other._it2);
+    auto not_equal = !(this->_it1 == other._it1 || this->_it2 == other._it2);
+    return not_equal;
   }
 
   Iterator1 _it1;
@@ -314,17 +360,30 @@ template <typename ContainerType1, typename ContainerType2> class zip {
 public:
   using IteratorType = zipiterator<typename ContainerType1::iterator,
                                    typename ContainerType2::iterator>;
-  zip(const ContainerType1 &c1, const ContainerType2 &c2) : _c1(c1), _c2(c2){};
+  using value_type = std::tuple<typename ContainerType1::iterator::value_type,
+                                typename ContainerType2::iterator::value_type>;
+  using iterator = IteratorType;
+  zip(const ContainerType1 &c1, const ContainerType2 &c2) : _c1(c1), _c2(c2) {
+    auto c1begin = c1.begin();
+    auto c1end = c1.end();
+    auto c2begin = c2.begin();
+    auto c2end = c2.end();
+    auto pp = IteratorType(this->_c1.end(), this->_c1.end(), this->_c2.end(),
+                           this->_c2.end());
+    utils::println(4554);
+  };
   IteratorType begin() {
-    //        return IteratorType(this->_c1.begin(),this->_c2.begin());
     return IteratorType(this->_c1.begin(), this->_c1.end(), this->_c2.begin(),
                         this->_c2.end());
   }
 
   IteratorType end() {
-    return IteratorType(this->_c1.end(), this->_c1.end(), this->_c2.end(),
-                        this->_c2.end());
+    auto t = IteratorType(this->_c1.end(), this->_c1.end(), this->_c2.end(),
+                          this->_c2.end());
+    return t;
   }
+
+  size_t size() { return utils::min(this->_c1.size(), this->_c2.size()); }
 
   ContainerType1 _c1;
   ContainerType2 _c2;
@@ -333,16 +392,18 @@ public:
 template <typename T> struct enumerate_iterator {
 public:
   enumerate_iterator(uint64_t initial_count, typename T::iterator it)
-      : count(initial_count), _it(it){};
+      : count(initial_count), _it(it){
+                                  // utils::println("paused");
+                              };
   using value_type = std::tuple<uint64_t, typename T::value_type>;
   value_type operator*() { return value_type{this->count, *(this->_it)}; }
   enumerate_iterator &operator++() {
-    this->count++;
-    this->_it++;
+    ++this->count;
+    ++this->_it;
     return *this;
   }
   bool operator==(enumerate_iterator &other) {
-    return (this->_it == other._it);
+    return !(this->_it != other._it);
   }
   bool operator!=(enumerate_iterator &other) {
     return !this->operator==(other);
@@ -355,15 +416,15 @@ template <typename T> struct enumerate {
 public:
   using iterator = enumerate_iterator<T>;
   using value_type = typename enumerate_iterator<T>::value_type;
-  enumerate(T &c) : _c(c){};
+  enumerate(const T &c) : _c(c){};
+  enumerate(T &&c) : _c(std::move(c)){};
   iterator begin() { return iterator{this->count, this->_c.begin()}; }
   iterator end() {
     return iterator{
-        // 99999999,
         this->_c.size(),
         this->_c.end()}; // 因为要做到编译期实现，所以这里只能先写死一个数
   }
-  T &_c;
+  T _c;
   uint64_t count = 0;
 };
 
@@ -397,60 +458,6 @@ auto vunpack(NestedContainerWithArithmeticElement auto &&c) {
     return std::make_tuple(c[Is]...);
   }
   (std::make_index_sequence<N>{});
-}
-
-auto max(const Comparable auto& a,const Comparable auto& b) {
-  return a < b ? b : a;
-}
-
-template<Comparable... Args>
-auto max(const Comparable auto& a,const Args&... args){
-  return utils::max(a, utils::max(args...));
-}
-
-template <
-    template <typename, typename> class Container, 
-    typename T,
-    typename Allocator = std::allocator<T>
->
-auto max(const Container<T,Allocator>& container){
-  if(container.size() == 0){
-    throw std::runtime_error(std::string("container must contain at least one element!"));
-  }
-
-  return std::accumulate(
-            container.begin(),
-            container.end(),
-            *container.begin(),
-            [](auto a,auto b){return utils::max(a,b);}
-          );
-}
-
-auto min(const Comparable auto& a,const Comparable auto& b) {
-  return a < b ? a : b;
-}
-
-template<Comparable... Args>
-auto min(const Comparable auto& a,const Args&... args){
-  return utils::min(a, utils::min(args...));
-}
-
-template <
-    template <typename, typename> class Container, 
-    typename T,
-    typename Allocator = std::allocator<T>
->
-auto min(const Container<T,Allocator>& container){
-  if(container.size() == 0){
-    throw std::runtime_error(std::string("container must contain at least one element!"));
-  }
-  
-  return std::accumulate(
-            container.begin(),
-            container.end(),
-            *container.begin(),
-            [](auto a,auto b){return utils::min(a,b);}
-          );
 }
 
 template <ContainerWithArithmeticElement C, typename Predicate>
@@ -537,24 +544,16 @@ auto fold(Func &&f, First &&first, Second &&second, Rest &&...rest) {
       std::forward<Rest>(rest)...);
 }
 
-template<
-  template<typename,typename> class Container,
-  typename T,
-  typename Allocator = std::allocator<T>,
-  typename Func
->
-auto fold(Func&& f,const Container<T,Allocator>& container){
-  if(container.size() == 0){
-    throw std::runtime_error(std::string("container must contain at least one element!"));
+template <template <typename, typename> class Container, typename T,
+          typename Allocator = std::allocator<T>, typename Func>
+auto fold(Func &&f, const Container<T, Allocator> &container) {
+  if (container.size() == 0) {
+    throw std::runtime_error(
+        std::string("container must contain at least one element!"));
   }
   return std::accumulate(
-      container.begin(),
-      container.end(),
-      *container.begin(),
-      [&f](auto a,auto b){
-        return std::forward<Func>(f)(a,b);
-      }
-  );
+      container.begin(), container.end(), *container.begin(),
+      [&f](auto a, auto b) { return std::forward<Func>(f)(a, b); });
 }
 
 /*

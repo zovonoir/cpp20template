@@ -1,8 +1,13 @@
-#include "utils.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <iostream>
+#include <numeric>
+#include <ranges>
 #include <vector>
+
+#include "utils.h"
+
+#if 1
 
 TEST(test, test_print) {
   int x = 1;
@@ -61,6 +66,21 @@ TEST(test, map) {
   auto v2 = utils::map([](int x) { return std::sin(x); }, v1);
   auto v3 = utils::map([](int x) { return x + 1; }, v1);
   utils::println("v2=", v2, "v3=", v3);
+  auto v2_groundtruth =
+      v1 | std::views::transform([](auto x) { return std::sin(x); });
+  auto v3_groundtruth =
+      v1 | std::views::transform([](auto x) { return x + 1; });
+  int index = 0;
+  for (const auto &val : v2_groundtruth) {
+    EXPECT_TRUE(val == v2[index]);
+    index++;
+  }
+
+  index = 0;
+  for (const auto &val : v3_groundtruth) {
+    EXPECT_TRUE(val == v3[index]);
+    index++;
+  }
 }
 
 TEST(test, shape_to_string) {
@@ -72,16 +92,22 @@ TEST(test, shape_to_string) {
 TEST(test, zip1) {
   std::vector<int> v1{1, 2, 3, -1, -2, -3};
   std::vector<int> v2{2, 3, 4, 5, 6, 7};
+  int index = 0;
   for (const auto &[x, y] : utils::zip(v1, v2)) {
     utils::println("x=", x, "y=", y);
+    EXPECT_TRUE(x == v1[index] && y == v2[index]);
+    index++;
   }
 }
 
 TEST(test, zip2) {
   std::vector<int> v1{1, 2, 3, -1, -2, -3};
   std::vector<int> v2{2, 3, 4, 5, 6, 7, 9, 9, 9, 9, 9, 9, 9, 9};
+  int index = 0;
   for (const auto &[x, y] : utils::zip(v1, v2)) {
     utils::println("x=", x, "y=", y);
+    EXPECT_TRUE(x == v1[index] && y == v2[index]);
+    index++;
   }
 }
 
@@ -113,6 +139,34 @@ TEST(test, enumerate2) {
   int index = 0;
   for (const auto &[idx, val] : utils::enumerate(v1)) {
     utils::println("idx=", idx, "val=", val);
+    EXPECT_TRUE(idx == index);
+    for (int i = 0; i < val.size(); i++) {
+      EXPECT_TRUE(val[i] == v1[index][i]);
+    }
+    index++;
+  }
+}
+
+TEST(test, zip_enumerate1) {
+  std::vector<int> v1{1, 2, 3};
+  std::vector<int> v2{2, 3, 4, 5, 6, 7, 9, 9, 9, 9, 9, 9, 9, 9};
+  int index = 0;
+  auto p = utils::zip(v1, v2);
+  for (const auto &[idx, val] : utils::enumerate(p)) {
+    auto [x, y] = val;
+    EXPECT_TRUE(x == v1[index] && y == v2[index] && index == idx);
+    index++;
+  }
+}
+
+TEST(test, zip_enumerate2) {
+  std::vector<int> v1{1, 2, 3};
+  std::vector<int> v2{2, 3, 4, 5, 6, 7, 9, 9, 9, 9, 9, 9, 9, 9};
+  int index = 0;
+  for (const auto &[idx, val] : utils::enumerate(utils::zip(v1, v2))) {
+    auto [x, y] = val;
+    EXPECT_TRUE(x == v1[index] && y == v2[index] && index == idx);
+    index++;
   }
 }
 
@@ -133,19 +187,30 @@ TEST(test, vunpack2) {
   std::vector<std::vector<int>> v1{{1, 2, 3, 4}, {5, 6, 7}};
   auto [y1, y2] = utils::vunpack<2>(v1);
   utils::println(y1, y2);
+  EXPECT_TRUE(utils::equals(v1[0], y1) && utils::equals(v1[1], y2));
+  EXPECT_TRUE(y1[0] == 1 && y1[1] == 2 && y1[2] == 3 && y1[3] == 4);
+  EXPECT_TRUE(y2[0] == 5 && y2[1] == 6 && y2[2] == 7);
 }
 
 TEST(test, max_min) {
   std::vector<int> v1{3, 4, 5, 6, 7, 99, -100};
   auto val1 = utils::max(1, 2, 3, 4, 5, 6);
-  auto val2 = utils::max<7>(v1);
-  utils::println(val1, val2);
+  auto val2 = utils::max(v1);
+  EXPECT_TRUE(val1 == 6 && val2 == 99);
+  auto val3 = utils::min(v1);
+  auto val4 = utils::min(1, 2, 3, 4, 5, 6, -1, 0, -99);
+  EXPECT_TRUE(val3 == -100 && val4 == -99);
+
+  std::vector<int> v2{3};
+  EXPECT_TRUE(utils::max(v2) == utils::min(v2) && utils::max(v2) == 3);
 }
 
 TEST(test, select) {
   std::vector<int> v1{3, 4, 5, 6, 7, 99, -100};
   auto val1 = utils::select(v1, [](auto v) { return v % 2 == 0; });
   utils::println(val1);
+  EXPECT_TRUE(val1.size() == 3 && val1[0] == 4 && val1[1] == 6 &&
+              val1[2] == -100);
 }
 
 // newton method
@@ -160,3 +225,17 @@ TEST(test, fold) {
                                  5, 6, 7, 8, 9, 10);
   EXPECT_TRUE(factorial10 == 1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9 * 10);
 }
+
+TEST(test, fold2) {
+  // auto factorial10 = utils::fold([](int x, int y) { return x * y; }, 1, 2, 3,
+  // 4,
+  //                                5, 6, 7, 8, 9, 10);
+  // EXPECT_TRUE(factorial10 == 1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9 * 10);
+
+  auto factorial10 =
+      utils::fold([](int x, int y) { return x * y; },
+                  std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+  EXPECT_TRUE(factorial10 == 1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9 * 10);
+}
+
+#endif
