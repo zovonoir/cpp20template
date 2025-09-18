@@ -1,1 +1,2 @@
 This repository stores some C++ template utility libraries used in daily development work. It utilizes features from C++20 and can be used both as a collection of utility functions for development and as an introductory tutorial for template metaprogramming. Some functions are inspired by wolfram mathemtica language: https://reference.wolfram.com/language/index.html.zh?source=footer
+https://reference.wolfram.com/language/index.html.en?source=footer
